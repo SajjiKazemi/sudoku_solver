@@ -16,5 +16,5 @@ if __name__ == '__main__':
                        [0, 0, 5, 2, 9, 0, 3, 8, 0]])
 
 test = sudoku.sudoku(sample)
-print(test.check_row())
+print(test.check_row(2))
 test.print_sudoku()
