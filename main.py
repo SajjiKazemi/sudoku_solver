@@ -14,8 +14,14 @@ def main():
                        [0, 0, 5, 2, 9, 0, 3, 8, 0]])
 
     test = sudoku.sudoku(sample)
-    test.backTrack_search()
-    print(test.table)
+    print(test.get_random_value())
+
+    ###Backtracking search
+    start_sudoku = sudoku.sudoku(sample)
+    solved_sudoku, state = start_sudoku.backTrack_search()
+    if state == True:
+        print("Sudoku solved by backtracking search:")
+        print(solved_sudoku)
 
 
 if __name__ == '__main__':

@@ -1,14 +1,18 @@
 import numpy as np
 import copy
+import random
 
 class sudoku():
     def __init__(self, table: np.ndarray):
         self.refrence_table = table
         self.table = table
+        self.child_table = table
         self.ignore_value = 0
         self.solved = False
         self.saved_tables = []
         self.saved_domains = []
+        self.domains = self.prepare_domains()
+        self.cells = self.get_cells_randomized()
         
     def check_row(self, row: int):
         "This function checks if the row is valid in terms of sudoku rules"
@@ -191,16 +195,51 @@ class sudoku():
         self.table = self.saved_tables[-1]
         self.domains = self.saved_domains[-1]
 
+    def get_random_value(self):
+        domain_values = self.domains[self.cells[0][0]][self.cells[0][1]]
+        random.shuffle(domain_values)
+        return domain_values
+
+    def create_children(self, domain_values: list, cell: tuple):
+        self.children = []
+        for i in range(len(domain_values)):
+            table = copy.deepcopy(self.table)
+            table[cell[0]][cell[1]] = domain_values[i]
+            self.children.append(sudoku(table))
+        return self.children
+
 
     def backTrack_search(self):
-        self.prepare_domains()
-        self.correct_domains(row=0, column=0)
-        #self.saved_states()
-        
-        while not self.solved:
-            while self.set_cell():
+        "This function solves the sudoku using backtracking search"
+        self.children = self.create_children(self.get_random_value(), self.cells[0])
+        while len(self.children) > 0:
+            if not self.children[0].check_sudoku():
+                del self.children[0]
                 pass
-            self.return_to_last_state()
-
+            elif self.children[0].is_complete():
+                self.solved = True
+                return self.children[0].table, True
+            else:
+                self.child_table, state = self.children[0].backTrack_search()
+                if state == None:
+                    del self.children[0]
+                    pass
+                elif state == True:
+                    return self.child_table, True
+        return self.child_table, None
         
-        return self.table
+    def is_complete(self):
+        for i in range(9):
+            for j in range(9):
+                if self.table[i][j] == self.ignore_value:
+                    return False
+        return True
+
+    def get_cells_randomized(self):
+        self.cells = []
+        for i in range(9):
+            for j in range(9):
+                if self.table[i][j] == self.ignore_value:
+                    self.cells.append((i, j))
+        random.shuffle(self.cells)
+        return self.cells
