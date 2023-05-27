@@ -12,7 +12,7 @@ class sudoku():
         self.saved_tables = []
         self.saved_domains = []
         self.domains = self.prepare_domains()
-        self.cells = self.get_cells_randomized()
+        self.cells = self.get_cells()
         
     def check_row(self, row: int):
         "This function checks if the row is valid in terms of sudoku rules"
@@ -130,31 +130,32 @@ class sudoku():
         elif square == 8:
             return 6, 6
 
-    def correct_domains(self, row: int, column: int):
+    def correct_domains(self):
         "This function corrects the domains for the sudoku"
-        for i in range(9-row):
-            for j in range(9-column):
-                spec_square = self.det_square(row+i, column+j)
+        for i in range(9):
+            for j in range(9):
+                spec_square = self.det_square(i, j)
                 first_digit, second_digit = self.get_square_address(spec_square)
+                
+                if self.table[i][j] != self.ignore_value:
+                    for k in range(9):
+                        if self.table[i][j] in self.domains[i][k]:
+                            self.domains[i][k].remove(self.table[i][j])
+                            if len(self.domains[i][k]) == 0 and self.refrence_table[i][j] != self.ignore_value:
+                                self.domains[i][k].append(self.refrence_table[i][j])
 
-                if self.table[row+i][column+j] != self.ignore_value:
-                    for k in range(9-column):
-                        if self.table[row+i][column+j] in self.domains[row+i][column+k]:
-                            self.domains[row+i][column+k].remove(self.table[row+i][column+j])
-                            if len(self.domains[row+i][column+k]) == 0 and self.refrence_table[row+i][column+j] != self.ignore_value:
-                                self.domains[row+i][column+k] = [self.refrence_table[row+i][column+j]]
-                    for l in range(9-row):
-                        if self.table[row+i][column+j] in self.domains[row+k][column+j]:
-                            self.domains[row+k][column+j].remove(self.table[row+i][column+j])
-                            if len(self.domains[row+k][column+j]) == 0 and self.refrence_table[row+i][column+j] != self.ignore_value:
-                                self.domains[row+k][column+j] = [self.refrence_table[row+i][column+j]]
-                    
+                        if self.table[i][j] in self.domains[k][j]:
+                            self.domains[k][j].remove(self.table[i][j])
+                            if len(self.domains[k][j]) == 0 and self.refrence_table[i][j] != self.ignore_value:
+                                self.domains[k][j].append(self.refrence_table[i][j])
+
                     for k in range(3):
                         for l in range(3):
-                            if self.table[first_digit+k][second_digit+l] in self.domains[row+i][column+j]:
-                                self.domains[row+i][column+j].remove(self.table[first_digit+k][second_digit+l])
-                                if len(self.domains[row+i][column+j]) == 0 and self.refrence_table[row+i][column+j] != self.ignore_value:
-                                    self.domains[row+i][column+j] = [self.refrence_table[row+i][column+j]]
+                            if self.table[i][j] in self.domains[k+first_digit][l+second_digit]:
+                                self.domains[k+first_digit][l+second_digit].remove(self.table[i][j])
+                                if len(self.domains[k+first_digit][l+second_digit]) == 0 and self.refrence_table[i][j] != self.ignore_value:
+                                    self.domains[k+first_digit][l+second_digit].append(self.refrence_table[i][j])
+
         return self.domains
 
         
@@ -195,9 +196,12 @@ class sudoku():
         self.table = self.saved_tables[-1]
         self.domains = self.saved_domains[-1]
 
-    def get_random_value(self):
+    def get_value(self, heuristic = False):
         domain_values = self.domains[self.cells[0][0]][self.cells[0][1]]
-        random.shuffle(domain_values)
+        if not heuristic:
+            random.shuffle(domain_values)
+        else:
+            domain_values = self.get_least_constraining_value((self.cells[0][0], self.cells[0][1]))
         return domain_values
 
     def create_children(self, domain_values: list, cell: tuple):
@@ -206,27 +210,35 @@ class sudoku():
             table = copy.deepcopy(self.table)
             table[cell[0]][cell[1]] = domain_values[i]
             self.children.append(sudoku(table))
+        self.expa_nodes = 1
         return self.children
 
 
-    def backTrack_search(self):
+    def backTrack_search(self, forward_checking = False, heuristic = False):
         "This function solves the sudoku using backtracking search"
-        self.children = self.create_children(self.get_random_value(), self.cells[0])
+        if forward_checking:
+            self.correct_domains()
+            self.get_cells(heuristic)
+        self.children = self.create_children(self.get_value(heuristic), self.cells[0])            
+
         while len(self.children) > 0:
+
             if not self.children[0].check_sudoku():
                 del self.children[0]
                 pass
             elif self.children[0].is_complete():
                 self.solved = True
-                return self.children[0].table, True
+                return self.children[0].table, self.expa_nodes, True
             else:
-                self.child_table, state = self.children[0].backTrack_search()
+                self.child_table, exp_nodes, state = self.children[0].backTrack_search(forward_checking, heuristic)
+                self.expa_nodes = self.expa_nodes + exp_nodes
                 if state == None:
+                    self.expa_nodes = self.expa_nodes + exp_nodes
                     del self.children[0]
                     pass
                 elif state == True:
-                    return self.child_table, True
-        return self.child_table, None
+                    return self.child_table, self.expa_nodes, True
+        return self.child_table, self.expa_nodes, None
         
     def is_complete(self):
         for i in range(9):
@@ -235,11 +247,62 @@ class sudoku():
                     return False
         return True
 
-    def get_cells_randomized(self):
+    def get_cells(self, heuristic = False):
         self.cells = []
         for i in range(9):
             for j in range(9):
                 if self.table[i][j] == self.ignore_value:
                     self.cells.append((i, j))
-        random.shuffle(self.cells)
+        if not heuristic:
+            random.shuffle(self.cells)
+        else:
+            self.cell = self.get_most_constrained_variable(self.cells)
         return self.cells
+    
+    def get_most_constrained_variable(self, cells: list):
+        "This function returns the most constrained variable"
+        self.mrv = []
+        scored_cell = []
+        for i in range(len(cells)):
+            if len(self.domains[cells[i][0]][cells[i][1]]) == 1:
+                scored_cell.append((cells[i][0], cells[i][1], 1000))
+            else:
+                filtered_column = self.table[:, cells[i][1]][self.table[:, cells[i][1]] != self.ignore_value]
+                filtered_row = self.table[cells[i][0]][self.table[cells[i][0]] != self.ignore_value]
+                detd_square = self.det_square(cells[i][0], cells[i][1])
+                detd_square = self.separate_square(detd_square)
+                filtered_square = detd_square.flatten()[detd_square.flatten() != self.ignore_value]
+                score = len(filtered_column) + len(filtered_row) + len(filtered_square)
+                scored_cell.append((cells[i][0], cells[i][1], score))
+
+        scored_cell = sorted(scored_cell, key=lambda x: x[2], reverse=True)
+        scored_cell = np.array(scored_cell)
+        cells = scored_cell[:, :2]
+        return cells                   
+    
+    def get_least_constraining_value(self, cell: tuple):
+        "This function returns the least constraining value"
+        scored_value = []
+        domains_column = 0
+        domains_row = 0
+        domains_square = 0
+        domain = self.domains[cell[0]][cell[1]]
+        for value in domain:
+            for i in range(9):
+                domains_column = domains_column + 1 if np.isin(value, self.domains[i][cell[1]]) else domains_column
+                domains_row = domains_row + 1 if np.isin(value, self.domains[cell[0]][i]) else domains_row
+                detd_square = self.det_square(cell[0], cell[1])
+                detd_square_address = self.get_square_address(detd_square)
+                for j in range(3):
+                    for k in range(3):
+                        domains_square = domains_square + 1 if np.isin(value, self.domains[detd_square_address[0]+j][detd_square_address[1]+k]) else domains_square
+
+            score = domains_column + domains_row + domains_square
+            domains_column = 0
+            domains_row = 0
+            domains_square = 0
+            scored_value.append((value, score))
+        scored_value = sorted(scored_value, key=lambda x: x[1], reverse=True)
+        scored_value = [x[0] for x in scored_value]
+        return scored_value
+    
